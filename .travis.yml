@@ -1,6 +1,26 @@
+---
 sudo: required
 services: docker
 
+before_install:
+  # Upgrade Docker.
+  - sudo apt-get update
+  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+
 script:
-  - docker login --username $QUAY_USERNAME --password $QUAY_PASSWORD quay.io
-  - ./buildpush.sh
+  docker build -t docker-ansible \
+  --build-arg RHSM_USERNAME=$RHSM_USERNAME \
+  --build-arg RHSM_PASSWORD=$RHSM_PASSWORD \
+  --build-arg RHSM_POOL_ID=$RHSM_POOL_ID .
+
+  # Test running the container.
+  - docker run --name test-container -d --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro docker-ansible
+
+  # Verify Ansible is available in the container.
+  - docker exec --tty test-container env TERM=xterm ansible --version
+
+after_success:
+  - if [[ "$TRAVIS_BRANCH" == "master" ]]; then
+      docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD ;
+      make push-image ;
+    fi
